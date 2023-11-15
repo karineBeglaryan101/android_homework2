@@ -1,7 +1,9 @@
 package com.example.hw02
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
+import android.location.LocationManager
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -45,14 +47,16 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.hw02.ui.theme.HW02Theme
-import com.google.android.gms.location.FusedLocationProviderClient
-import com.google.android.gms.location.LocationServices
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import okhttp3.OkHttpClient
+import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.GET
 import retrofit2.http.Query
 
+const val TAG = "WEATHER"
 
 class MainActivity : ComponentActivity() {
     private val locationPermissionRequestCode = 123
@@ -65,12 +69,18 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     requestLocationPermission()
+                    LocationProvider.initialize(this)
                     val navController = rememberNavController()
                     NavHost(
                         navController = navController,
                         startDestination = "welcome_screen"
                     ) {
-                        val viewModel = WeatherViewModel(applicationContext)
+                        val viewModel = WeatherViewModel()
+                           viewModel.fetchWeatherForLocation(
+                            this@MainActivity,
+                            weatherApiService,
+                            "8e7826a07c1644d280d82050231311"
+                        )
                         composable("welcome_screen") { WelcomeScreen(navController, viewModel) }
                         composable("second_screen") { SecondScreen(navController, viewModel) }
                     }
@@ -79,10 +89,11 @@ class MainActivity : ComponentActivity() {
 
         }
     }
+
     private fun requestLocationPermission() {
         if (ContextCompat.checkSelfPermission(
                 this,
-                  android.Manifest.permission.ACCESS_FINE_LOCATION
+                android.Manifest.permission.ACCESS_FINE_LOCATION
             ) != PackageManager.PERMISSION_GRANTED
         ) {
             ActivityCompat.requestPermissions(
@@ -92,6 +103,7 @@ class MainActivity : ComponentActivity() {
             )
         }
     }
+
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<out String>,
@@ -100,17 +112,24 @@ class MainActivity : ComponentActivity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == locationPermissionRequestCode) {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-
+                // Permission granted
             } else {
-
+                // Permission denied
             }
         }
     }
 }
 
+val loggingInterceptor = HttpLoggingInterceptor().also {
+    it.level = HttpLoggingInterceptor.Level.BODY
+}
+val okHttpClient = OkHttpClient.Builder()
+    .addInterceptor(loggingInterceptor)
+    .build();
 
 val retrofit = Retrofit.Builder()
     .baseUrl("https://api.weatherapi.com/")
+    .client(okHttpClient)
     .addConverterFactory(GsonConverterFactory.create())
     .build()
 
@@ -125,55 +144,56 @@ interface WeatherApiService {
 
 val weatherApiService: WeatherApiService = retrofit.create(WeatherApiService::class.java)
 
-class WeatherViewModel(private val context: Context) : ViewModel() {
+class WeatherViewModel() : ViewModel() {
     private val _weatherData = MutableLiveData<WeatherData>()
+    private val _currentWeatherData = MutableLiveData<WeatherData>()
     val weatherData: LiveData<WeatherData> get() = _weatherData
+    val currentWeatherData: LiveData<WeatherData> get() = _currentWeatherData
 
-    private val fusedLocationClient: FusedLocationProviderClient by lazy {
-        LocationServices.getFusedLocationProviderClient(context)
-    }
-
-    fun fetchWeatherForCurrentLocation() {
-        viewModelScope.launch {
-            try {
-                if (ContextCompat.checkSelfPermission(
-                        context,
-                        android.Manifest.permission.ACCESS_FINE_LOCATION
-                    ) == PackageManager.PERMISSION_GRANTED
-                ) {
-                    val location = fusedLocationClient.lastLocation.result
-                    println(location)
-                    if (location != null) {
-                        val cityName = location.latitude.toString() + "," + location.longitude.toString()
-                        val apiKey = getApiKey()
-                        val weather = weatherApiService.getWeather(
-                            cityName,
-                            apiKey
-                        )
-                        _weatherData.postValue(weather)
-                    } else {
-                        Log.e("WeatherViewModel", "No last known location available")
+    fun fetchWeatherForLocation(
+        context: Context,
+        weatherApiService: WeatherApiService,
+        apiKey: String
+    ) {
+        try {
+            if (ContextCompat.checkSelfPermission(
+                    context,
+                    android.Manifest.permission.ACCESS_FINE_LOCATION
+                ) == PackageManager.PERMISSION_GRANTED
+            ) {
+                viewModelScope.launch {
+                    var location = LocationProvider.getCurrentLocation()
+                    if (location == null) {
+                        delay(6000L)
+                        location = LocationProvider.getCurrentLocation()
                     }
-                } else {
-                    Log.e("WeatherViewModel", "Location permission not granted")
+                    Log.e(TAG, "LOCATION BEFORE REQUEST" + location.toString())
+                    if (location != null) {
+                        val cityName = "${location.first},${location.second}"
+                        val weather = weatherApiService.getWeather(cityName, apiKey)
+                        _currentWeatherData.postValue(weather)
+                    } else {
+                        Log.e(TAG, "No last known location available")
+                    }
                 }
-            } catch (e: Exception) {
-                Log.e("WeatherViewModel", "Error fetching weather data", e)
+            } else {
+                Log.e(TAG, "Location permission not granted")
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching weather data", e)
         }
     }
 
 
     fun fetchWeatherData(city: City) {
+        Log.e(TAG, "fetchWeatherData")
         viewModelScope.launch {
             try {
                 val apiKey = getApiKey()
-
                 val weather = weatherApiService.getWeather(city.name, apiKey)
-
                 _weatherData.postValue(weather)
             } catch (e: Exception) {
-
+                Log.e(TAG, e.toString())
             }
         }
     }
@@ -182,7 +202,6 @@ class WeatherViewModel(private val context: Context) : ViewModel() {
         return "8e7826a07c1644d280d82050231311"
     }
 }
-
 
 data class City(val name: String, val description: String, val imageResource: Int)
 
@@ -195,8 +214,7 @@ fun WelcomeScreen(navController: NavController, viewModel: WeatherViewModel) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        viewModel.fetchWeatherForCurrentLocation()
-        val weatherData by viewModel.weatherData.observeAsState()
+        val weatherData by viewModel.currentWeatherData.observeAsState()
 
         weatherData?.let {
             Text(text = "In your current location temperature is: ${it.current.temp_c}°C")
@@ -262,7 +280,8 @@ fun SecondScreen(navController: NavController, viewModel: WeatherViewModel) {
                     if (cities.indexOf(city) != expandedCityIndex) {
                         viewModel.fetchWeatherData(city)
                     }
-                    expandedCityIndex = if (cities.indexOf(city) != expandedCityIndex) cities.indexOf(city) else -1
+                    expandedCityIndex =
+                        if (cities.indexOf(city) != expandedCityIndex) cities.indexOf(city) else -1
 
                 }
             }
@@ -322,6 +341,26 @@ fun CityItem(city: City, expanded: Boolean, viewModel: WeatherViewModel, onToggl
                     modifier = Modifier.padding(8.dp)
                 )
             }
+        }
+    }
+}
+
+typealias LocationCoordinate = Pair<Double, Double>
+
+object LocationProvider {
+    private var currentLocation: LocationCoordinate? = null
+    fun getCurrentLocation(): LocationCoordinate? {
+        return currentLocation
+    }
+
+    @SuppressLint("MissingPermission")
+    fun initialize(context: Context) {
+        val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 5000L, 5f) {
+            it.longitude = 180 + it.longitude
+            currentLocation = it.longitude to it.latitude
+
+            Log.e(TAG, "initialize: ${currentLocation}")
         }
     }
 }
