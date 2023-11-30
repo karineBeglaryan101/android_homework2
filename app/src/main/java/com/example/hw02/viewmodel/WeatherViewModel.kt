@@ -3,6 +3,10 @@ package com.example.hw02.viewmodel
 import android.content.Context
 import android.content.pm.PackageManager
 import android.util.Log
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
@@ -21,9 +25,11 @@ class WeatherViewModel() : ViewModel() {
     private val _weatherData = MutableLiveData<WeatherData>()
     private val _currentWeatherData = MutableLiveData<WeatherData>()
     private val _searchWeatherData = MutableLiveData<WeatherData>()
+    private val _isLoading = MutableLiveData<Boolean>(false)
     val weatherData: LiveData<WeatherData> get() = _weatherData
     val currentWeatherData: LiveData<WeatherData> get() = _currentWeatherData
     val searchWeatherData: LiveData<WeatherData> get() = _searchWeatherData
+    val isloading: LiveData<Boolean> get() = _isLoading
     fun fetchWeatherForLocation(
         context: Context,
         weatherApiService: WeatherApiService,
@@ -60,7 +66,6 @@ class WeatherViewModel() : ViewModel() {
 
 
     fun fetchWeatherData(city: City) {
-        Log.e(TAG, "fetchWeatherData")
         viewModelScope.launch {
             try {
                 val apiKey = getApiKey()
@@ -73,7 +78,7 @@ class WeatherViewModel() : ViewModel() {
     }
 
     fun searchWeatherData(cityName: String) {
-        Log.e(TAG, "fetchWeatherData")
+        _isLoading.postValue(true)
         viewModelScope.launch {
             try {
                 val apiKey = getApiKey()
@@ -84,7 +89,10 @@ class WeatherViewModel() : ViewModel() {
                     _searchWeatherData.postValue(null)
                 }
             } catch (e: Exception) {
-                Log.e(TAG, e.toString())
+                _searchWeatherData.postValue(null)
+            }
+            finally {
+                _isLoading.postValue(false)
             }
         }
     }

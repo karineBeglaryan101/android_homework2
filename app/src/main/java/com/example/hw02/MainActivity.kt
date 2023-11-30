@@ -115,7 +115,7 @@ interface WeatherApiService {
     suspend fun getWeather(
         @Query("q") name: String,
         @Query("key") apiKey: String
-    ): WeatherData
+    ): WeatherData?
 }
 
 
