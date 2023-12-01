@@ -26,10 +26,10 @@ class WeatherViewModel() : ViewModel() {
     private val _currentWeatherData = MutableLiveData<WeatherData>()
     private val _searchWeatherData = MutableLiveData<WeatherData>()
     private val _isLoading = MutableLiveData<Boolean>(false)
-    val weatherData: LiveData<WeatherData> get() = _weatherData
-    val currentWeatherData: LiveData<WeatherData> get() = _currentWeatherData
-    val searchWeatherData: LiveData<WeatherData> get() = _searchWeatherData
-    val isloading: LiveData<Boolean> get() = _isLoading
+    val weatherData: LiveData<WeatherData> = _weatherData
+    val currentWeatherData: LiveData<WeatherData> = _currentWeatherData
+    val searchWeatherData: LiveData<WeatherData> = _searchWeatherData
+    val isloading: LiveData<Boolean> = _isLoading
     fun fetchWeatherForLocation(
         context: Context,
         weatherApiService: WeatherApiService,
@@ -53,14 +53,14 @@ class WeatherViewModel() : ViewModel() {
                         val weather = weatherApiService.getWeather(cityName, apiKey)
                         _currentWeatherData.postValue(weather)
                     } else {
-                        Log.e(TAG, "No last known location available")
+                        _currentWeatherData.postValue(null)
                     }
                 }
             } else {
-                Log.e(TAG, "Location permission not granted")
+                _currentWeatherData.postValue(null)
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error fetching weather data", e)
+            _currentWeatherData.postValue(null)
         }
     }
 
@@ -72,7 +72,7 @@ class WeatherViewModel() : ViewModel() {
                 val weather = weatherApiService.getWeather(city.name, apiKey)
                 _weatherData.postValue(weather)
             } catch (e: Exception) {
-                Log.e(TAG, e.toString())
+                _weatherData.postValue(null)
             }
         }
     }

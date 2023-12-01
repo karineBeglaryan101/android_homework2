@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.location.LocationManager
 import android.os.Bundle
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
@@ -34,7 +35,6 @@ const val TAG = "WEATHER"
 
 class MainActivity : ComponentActivity() {
     private val locationPermissionRequestCode = 123
-    @SuppressLint("SuspiciousIndentation")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
@@ -88,25 +88,16 @@ class MainActivity : ComponentActivity() {
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == locationPermissionRequestCode) {
-            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-
-            } else {
-
+            if (grantResults.isEmpty() || grantResults[0] != PackageManager.PERMISSION_GRANTED) {
+                Toast.makeText(this, "Location permission denied", Toast.LENGTH_SHORT).show()
             }
         }
     }
 }
 
-val loggingInterceptor = HttpLoggingInterceptor().also {
-    it.level = HttpLoggingInterceptor.Level.BODY
-}
-val okHttpClient = OkHttpClient.Builder()
-    .addInterceptor(loggingInterceptor)
-    .build();
 
 val retrofit = Retrofit.Builder()
     .baseUrl("https://api.weatherapi.com/")
-    .client(okHttpClient)
     .addConverterFactory(GsonConverterFactory.create())
     .build()
 
@@ -138,8 +129,6 @@ object LocationProvider {
         locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 5000L, 5f) {
             it.longitude = 180 + it.longitude
             currentLocation = it.longitude to it.latitude
-
-            Log.e(TAG, "initialize: ${currentLocation}")
         }
     }
 }
